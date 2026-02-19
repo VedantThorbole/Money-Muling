@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+pythonenv*
+
+# Flask
+instance/
+.webassets-cache
+
+# Data files
+*.csv
+*.json
+!sample_data.csv
+!test_data.csv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Uploads
+/tmp/*
+!/tmp/.gitkeep
+
+# Node
+node_modules/
+npm-debug.log

@@ -1,0 +1,2 @@
+# No additional requirements - all are in root requirements.txt
+# This file exists to indicate utils has no separate requirements
