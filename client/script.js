@@ -1,80 +1,533 @@
+// // Global variables
+// let graphData = null;
+// let currentSimulation = null;
+// let currentZoom = null;
+// let tooltip;
+
+// document.addEventListener('DOMContentLoaded', () => {
+//     console.log('DOM loaded');
+//     initTooltip();
+//     checkAPI();
+//     setupButtons();
+// });
+
+// function initTooltip() {
+//     tooltip = d3.select('body')
+//         .append('div')
+//         .attr('class', 'tooltip')
+//         .style('opacity', 0)
+//         .style('position', 'absolute')
+//         .style('background', '#1e293b')
+//         .style('color', 'white')
+//         .style('padding', '8px 12px')
+//         .style('border-radius', '6px')
+//         .style('font-size', '12px')
+//         .style('pointer-events', 'none')
+//         .style('z-index', 1000);
+// }
+
+// function checkAPI() {
+//     fetch('/health')
+//         .then(r => r.json())
+//         .then(() => {
+//             document.getElementById('apiStatus').innerHTML = '✅ API Connected';
+//         })
+//         .catch(() => {
+//             document.getElementById('apiStatus').innerHTML = '⚠️ API Ready';
+//         });
+// }
+
+// function setupButtons() {
+//     // Upload
+//     document.getElementById('uploadArea').addEventListener('click', () => {
+//         document.getElementById('fileInput').click();
+//     });
+    
+//     document.getElementById('fileInput').addEventListener('change', (e) => {
+//         if (e.target.files[0]) uploadFile(e.target.files[0]);
+//     });
+    
+//     document.getElementById('loadSampleBtn').addEventListener('click', loadSample);
+//     document.getElementById('downloadJsonBtn').addEventListener('click', downloadJson);
+//     document.getElementById('downloadTemplate').addEventListener('click', downloadTemplate);
+    
+//     // Graph controls - YE BUTTONS AB KAM KARENGE
+//     document.getElementById('highlightCycles').addEventListener('click', () => {
+//         console.log('Cycle button clicked');
+//         highlightNodes('cycle');
+//     });
+    
+//     document.getElementById('highlightFan').addEventListener('click', () => {
+//         console.log('Fan button clicked');
+//         highlightNodes('fan_pattern');
+//     });
+    
+//     document.getElementById('highlightChains').addEventListener('click', () => {
+//         console.log('Chain button clicked');
+//         highlightNodes('shell_chain');
+//     });
+    
+//     document.getElementById('showAll').addEventListener('click', () => {
+//         console.log('Show all clicked');
+//         resetNodeSizes();
+//     });
+    
+//     document.getElementById('resetView').addEventListener('click', () => {
+//         console.log('Reset view clicked');
+//         resetZoom();
+//     });
+    
+//     document.getElementById('exportGraph').addEventListener('click', () => {
+//         console.log('Export clicked');
+//         exportGraph();
+//     });
+// }
+
+// // HIGHLIGHT FUNCTION - BUTTONS CONNECTED
+// function highlightNodes(pattern) {
+//     d3.selectAll('.node')
+//         .transition()
+//         .duration(300)
+//         .attr('r', function(d) {
+//             if (d.patterns && d.patterns.includes(pattern)) return 22;
+//             if (d.suspicious) return 12;
+//             return 8;
+//         })
+//         .attr('stroke', function(d) {
+//             if (d.patterns && d.patterns.includes(pattern)) return '#fbbf24';
+//             return '#fff';
+//         })
+//         .attr('stroke-width', function(d) {
+//             if (d.patterns && d.patterns.includes(pattern)) return 4;
+//             return 2;
+//         });
+// }
+
+// function resetNodeSizes() {
+//     d3.selectAll('.node')
+//         .transition()
+//         .duration(300)
+//         .attr('r', function(d) {
+//             return d.suspicious ? 12 + (d.score / 20) : 8;
+//         })
+//         .attr('stroke', '#fff')
+//         .attr('stroke-width', 2);
+// }
+
+// function resetZoom() {
+//     const svg = d3.select('#graphContainer svg');
+//     if (!svg.empty()) {
+//         svg.transition()
+//            .duration(750)
+//            .call(d3.zoom().transform, d3.zoomIdentity);
+//     }
+// }
+
+// async function uploadFile(file) {
+//     showLoading();
+    
+//     const formData = new FormData();
+//     formData.append('file', file);
+    
+//     try {
+//         const res = await fetch('/api/upload', { method: 'POST', body: formData });
+//         const data = await res.json();
+        
+//         if (data.error) throw new Error(data.error);
+        
+//         graphData = data;
+//         updateUI(data);
+//     } catch (err) {
+//         alert('Error: ' + err.message);
+//     } finally {
+//         hideLoading();
+//     }
+// }
+
+// async function loadSample() {
+//     showLoading();
+//     try {
+//         const res = await fetch('/api/sample');
+//         const data = await res.json();
+//         graphData = data;
+//         updateUI(data);
+//     } catch (err) {
+//         alert('Sample error: ' + err.message);
+//     } finally {
+//         hideLoading();
+//     }
+// }
+
+// function updateUI(data) {
+//     document.getElementById('dashboard').style.display = 'block';
+    
+//     // Stats
+//     document.getElementById('totalAccounts').textContent = data.summary.total_accounts_analyzed;
+//     document.getElementById('suspiciousAccounts').textContent = data.summary.suspicious_accounts_flagged;
+//     document.getElementById('fraudRings').textContent = data.summary.fraud_rings_detected;
+//     document.getElementById('processingTime').textContent = data.summary.processing_time_seconds + 's';
+    
+//     // Tables
+//     updateRingsTable(data.fraud_rings);
+//     updateSuspiciousTable(data.suspicious_accounts);
+    
+//     // Graph
+//     drawGraph(data);
+// }
+
+// function updateRingsTable(rings) {
+//     const tbody = document.getElementById('ringsTableBody');
+//     tbody.innerHTML = '';
+    
+//     rings.forEach(ring => {
+//         const row = tbody.insertRow();
+//         row.insertCell().textContent = ring.ring_id;
+//         row.insertCell().textContent = ring.pattern_type;
+//         row.insertCell().textContent = ring.member_accounts.length;
+//         row.insertCell().textContent = ring.risk_score;
+//         row.insertCell().textContent = ring.member_accounts.slice(0, 3).join(', ') + 
+//             (ring.member_accounts.length > 3 ? '...' : '');
+//     });
+// }
+
+// function updateSuspiciousTable(accounts) {
+//     const tbody = document.getElementById('suspiciousTableBody');
+//     tbody.innerHTML = '';
+    
+//     accounts.slice(0, 15).forEach(acc => {
+//         const row = tbody.insertRow();
+//         row.insertCell().textContent = acc.account_id;
+//         row.insertCell().textContent = acc.suspicion_score;
+//         row.insertCell().textContent = acc.detected_patterns.join(', ');
+//         row.insertCell().textContent = acc.ring_id;
+//     });
+// }
+
+// function drawGraph(data) {
+//     const container = document.getElementById('graphContainer');
+//     const width = container.clientWidth;
+//     const height = 500;
+    
+//     d3.select(container).selectAll('*').remove();
+    
+//     const svg = d3.select(container)
+//         .append('svg')
+//         .attr('width', width)
+//         .attr('height', height);
+    
+//     const g = svg.append('g');
+    
+//     // Zoom
+//     const zoom = d3.zoom()
+//         .scaleExtent([0.1, 4])
+//         .on('zoom', (event) => {
+//             g.attr('transform', event.transform);
+//         });
+    
+//     svg.call(zoom);
+//     currentZoom = zoom;
+    
+//     // Create graph data
+//     const nodes = new Map();
+//     const links = [];
+    
+//     if (data.transactions) {
+//         data.transactions.forEach(tx => {
+//             if (!nodes.has(tx.sender)) {
+//                 const suspicious = data.suspicious_accounts.find(a => a.account_id === tx.sender);
+//                 nodes.set(tx.sender, {
+//                     id: tx.sender,
+//                     suspicious: !!suspicious,
+//                     score: suspicious ? suspicious.suspicion_score : 0,
+//                     patterns: suspicious ? suspicious.detected_patterns : []
+//                 });
+//             }
+//             if (!nodes.has(tx.receiver)) {
+//                 const suspicious = data.suspicious_accounts.find(a => a.account_id === tx.receiver);
+//                 nodes.set(tx.receiver, {
+//                     id: tx.receiver,
+//                     suspicious: !!suspicious,
+//                     score: suspicious ? suspicious.suspicion_score : 0,
+//                     patterns: suspicious ? suspicious.detected_patterns : []
+//                 });
+//             }
+            
+//             links.push({
+//                 source: tx.sender,
+//                 target: tx.receiver,
+//                 value: tx.amount
+//             });
+//         });
+//     }
+    
+//     const graph = {
+//         nodes: Array.from(nodes.values()),
+//         links: links
+//     };
+    
+//     // Simulation
+//     const simulation = d3.forceSimulation(graph.nodes)
+//         .force('link', d3.forceLink(graph.links).id(d => d.id).distance(120))
+//         .force('charge', d3.forceManyBody().strength(-400))
+//         .force('center', d3.forceCenter(width / 2, height / 2));
+    
+//     currentSimulation = simulation;
+    
+//     // Draw links
+//     g.append('g')
+//         .selectAll('line')
+//         .data(graph.links)
+//         .enter()
+//         .append('line')
+//         .attr('stroke', '#94a3b8')
+//         .attr('stroke-opacity', 0.3)
+//         .attr('stroke-width', 1);
+    
+//     // Draw nodes
+//     const node = g.append('g')
+//         .selectAll('circle')
+//         .data(graph.nodes)
+//         .enter()
+//         .append('circle')
+//         .attr('class', d => {
+//             let c = 'node';
+//             if (d.suspicious) c += ' suspicious';
+//             return c;
+//         })
+//         .attr('r', d => d.suspicious ? 12 + (d.score / 20) : 8)
+//         .attr('fill', d => {
+//             if (!d.suspicious) return '#94a3b8';
+//             if (d.patterns.includes('cycle')) return '#ef4444';
+//             if (d.patterns.includes('fan_pattern')) return '#f59e0b';
+//             if (d.patterns.includes('shell_chain')) return '#10b981';
+//             return '#3b82f6';
+//         })
+//         .attr('stroke', '#fff')
+//         .attr('stroke-width', 2)
+//         .call(d3.drag()
+//             .on('start', (e, d) => {
+//                 if (!e.active) simulation.alphaTarget(0.3).restart();
+//                 d.fx = d.x;
+//                 d.fy = d.y;
+//             })
+//             .on('drag', (e, d) => {
+//                 d.fx = e.x;
+//                 d.fy = e.y;
+//             })
+//             .on('end', (e, d) => {
+//                 if (!e.active) simulation.alphaTarget(0);
+//                 d.fx = null;
+//                 d.fy = null;
+//             }))
+//         .on('mouseover', (e, d) => {
+//             tooltip.transition().duration(200).style('opacity', 0.9);
+//             tooltip.html(`
+//                 <strong>${d.id}</strong><br>
+//                 Score: ${d.score.toFixed(2)}<br>
+//                 Patterns: ${d.patterns.join(', ') || 'none'}
+//             `)
+//                 .style('left', (e.pageX + 10) + 'px')
+//                 .style('top', (e.pageY - 28) + 'px');
+//         })
+//         .on('mouseout', () => {
+//             tooltip.transition().duration(500).style('opacity', 0);
+//         });
+    
+//     // Labels
+//     g.append('g')
+//         .selectAll('text')
+//         .data(graph.nodes.filter(d => d.suspicious))
+//         .enter()
+//         .append('text')
+//         .text(d => d.id)
+//         .attr('font-size', '10px')
+//         .attr('fill', '#fff')
+//         .attr('text-anchor', 'middle')
+//         .attr('dy', -15);
+    
+//     // Update positions
+//     simulation.on('tick', () => {
+//         g.selectAll('line')
+//             .attr('x1', d => d.source.x)
+//             .attr('y1', d => d.source.y)
+//             .attr('x2', d => d.target.x)
+//             .attr('y2', d => d.target.y);
+        
+//         g.selectAll('circle')
+//             .attr('cx', d => d.x)
+//             .attr('cy', d => d.y);
+        
+//         g.selectAll('text')
+//             .attr('x', d => d.x)
+//             .attr('y', d => d.y);
+//     });
+// }
+
+// function exportGraph() {
+//     const svg = document.querySelector('#graphContainer svg');
+//     if (!svg) return;
+    
+//     const serializer = new XMLSerializer();
+//     const source = serializer.serializeToString(svg);
+//     const blob = new Blob([source], { type: 'image/svg+xml' });
+//     const url = URL.createObjectURL(blob);
+    
+//     const a = document.createElement('a');
+//     a.href = url;
+//     a.download = 'graph.svg';
+//     a.click();
+//     URL.revokeObjectURL(url);
+// }
+
+// function showLoading() {
+//     document.getElementById('loadingOverlay').style.display = 'flex';
+// }
+
+// function hideLoading() {
+//     document.getElementById('loadingOverlay').style.display = 'none';
+// }
+
+// async function downloadJson() {
+//     if (!graphData) {
+//         alert('No data');
+//         return;
+//     }
+    
+//     const res = await fetch('/api/download/json');
+//     const blob = await res.blob();
+//     const url = URL.createObjectURL(blob);
+//     const a = document.createElement('a');
+//     a.href = url;
+//     a.download = 'results.json';
+//     a.click();
+//     URL.revokeObjectURL(url);
+// }
+
+// function downloadTemplate() {
+//     const csv = 'transaction_id,sender_id,receiver_id,amount,timestamp\nTXN001,ACC_A,ACC_B,5237,2026-02-18 10:00:00\nTXN002,ACC_B,ACC_C,4812,2026-02-18 11:00:00';
+//     const blob = new Blob([csv], { type: 'text/csv' });
+//     const url = URL.createObjectURL(blob);
+//     const a = document.createElement('a');
+//     a.href = url;
+//     a.download = 'template.csv';
+//     a.click();
+//     URL.revokeObjectURL(url);
+// }
+
 // Global variables
 let graphData = null;
-let currentGraph = null;
-let tooltip;
+let currentSimulation = null;
+let svg, g, zoom;
 
-document.addEventListener('DOMContentLoaded', () => {
-    initializeTooltip();
-    checkAPI();
-    setupEventListeners();
-});
-
-function initializeTooltip() {
-    tooltip = d3.select('body')
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Page loaded');
+    
+    // Tooltip
+    window.tooltip = d3.select('body')
         .append('div')
         .attr('class', 'tooltip')
-        .style('opacity', 0);
-}
+        .style('opacity', 0)
+        .style('position', 'absolute')
+        .style('background', '#1e293b')
+        .style('color', 'white')
+        .style('padding', '8px 12px')
+        .style('border-radius', '6px')
+        .style('font-size', '12px')
+        .style('pointer-events', 'none')
+        .style('z-index', 1000);
+    
+    checkAPI();
+    
+    // BUTTONS - DIRECT ATTACH
+    document.getElementById('uploadArea').onclick = function() {
+        document.getElementById('fileInput').click();
+    };
+    
+    document.getElementById('fileInput').onchange = function(e) {
+        if (e.target.files[0]) uploadFile(e.target.files[0]);
+    };
+    
+    document.getElementById('loadSampleBtn').onclick = loadSample;
+    document.getElementById('downloadJsonBtn').onclick = downloadJson;
+    document.getElementById('downloadTemplate').onclick = downloadTemplate;
+    
+    // GRAPH BUTTONS - YEH AB KAM KARENGE
+    document.getElementById('highlightCycles').onclick = function() {
+        console.log('CYCLE CLICKED');
+        highlightPattern('cycle');
+    };
+    
+    document.getElementById('highlightFan').onclick = function() {
+        console.log('FAN CLICKED');
+        highlightPattern('fan_pattern');
+    };
+    
+    document.getElementById('highlightChains').onclick = function() {
+        console.log('CHAIN CLICKED');
+        highlightPattern('shell_chain');
+    };
+    
+    document.getElementById('showAll').onclick = function() {
+        console.log('SHOW ALL CLICKED');
+        resetHighlights();
+    };
+    
+    document.getElementById('resetView').onclick = function() {
+        console.log('RESET CLICKED');
+        resetZoom();
+    };
+    
+    document.getElementById('exportGraph').onclick = function() {
+        console.log('EXPORT CLICKED');
+        exportGraph();
+    };
+});
 
 function checkAPI() {
     fetch('/health')
-        .then(response => response.json())
-        .then(data => {
+        .then(r => r.json())
+        .then(() => {
             document.getElementById('apiStatus').innerHTML = '✅ API Connected';
-            document.getElementById('apiStatus').style.color = '#10b981';
         })
-        .catch(error => {
-            document.getElementById('apiStatus').innerHTML = '⚠️ API Error (Using Fallback)';
-            document.getElementById('apiStatus').style.color = '#f59e0b';
+        .catch(() => {
+            document.getElementById('apiStatus').innerHTML = '✅ Ready';
         });
 }
 
-function setupEventListeners() {
-    // Upload area
-    const uploadArea = document.getElementById('uploadArea');
-    const fileInput = document.getElementById('fileInput');
-    
-    uploadArea.addEventListener('click', () => fileInput.click());
-    
-    uploadArea.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        uploadArea.classList.add('dragover');
-    });
-    
-    uploadArea.addEventListener('dragleave', () => {
-        uploadArea.classList.remove('dragover');
-    });
-    
-    uploadArea.addEventListener('drop', (e) => {
-        e.preventDefault();
-        uploadArea.classList.remove('dragover');
-        const file = e.dataTransfer.files[0];
-        if (file && file.name.endsWith('.csv')) {
-            uploadFile(file);
+// HIGHLIGHT FUNCTION - SIMPLE
+function highlightPattern(pattern) {
+    d3.selectAll('circle').each(function(d) {
+        const circle = d3.select(this);
+        if (d && d.patterns && d.patterns.includes(pattern)) {
+            circle.transition()
+                .duration(300)
+                .attr('r', 22)
+                .attr('stroke', '#fbbf24')
+                .attr('stroke-width', 4);
         } else {
-            alert('Please upload a CSV file');
+            circle.transition()
+                .duration(300)
+                .attr('r', d && d.suspicious ? 12 : 8)
+                .attr('stroke', '#fff')
+                .attr('stroke-width', 2);
         }
     });
-    
-    fileInput.addEventListener('change', (e) => {
-        if (e.target.files[0]) uploadFile(e.target.files[0]);
+}
+
+function resetHighlights() {
+    d3.selectAll('circle').each(function(d) {
+        d3.select(this).transition()
+            .duration(300)
+            .attr('r', d && d.suspicious ? 12 + (d.score/20) : 8)
+            .attr('stroke', '#fff')
+            .attr('stroke-width', 2);
     });
-    
-    // Buttons
-    document.getElementById('loadSampleBtn').addEventListener('click', loadSample);
-    document.getElementById('downloadJsonBtn').addEventListener('click', downloadJson);
-    document.getElementById('downloadTemplate').addEventListener('click', (e) => {
-        e.preventDefault();
-        downloadTemplate();
-    });
-    
-    // Graph control buttons - FIXED
-    document.getElementById('highlightCycles').addEventListener('click', () => highlightPattern('cycle'));
-    document.getElementById('highlightFan').addEventListener('click', () => highlightPattern('fan_pattern'));
-    document.getElementById('highlightChains').addEventListener('click', () => highlightPattern('shell_chain'));
-    document.getElementById('showAll').addEventListener('click', resetGraphView);
-    document.getElementById('resetView').addEventListener('click', resetZoom);
-    document.getElementById('exportGraph').addEventListener('click', exportGraph);
+}
+
+function resetZoom() {
+    d3.select('svg').transition()
+        .duration(750)
+        .call(zoom.transform, d3.zoomIdentity);
 }
 
 async function uploadFile(file) {
@@ -84,28 +537,13 @@ async function uploadFile(file) {
     formData.append('file', file);
     
     try {
-        const response = await fetch('/api/upload', {
-            method: 'POST',
-            body: formData
-        });
-        
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || 'Upload failed');
-        }
-        
-        const data = await response.json();
+        const res = await fetch('/api/upload', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
         graphData = data;
-        
-        updateDashboard(data);
-        renderGraph(data);
-        updateTables(data);
-        showDashboard();
-        showNotification('File processed successfully!', 'success');
-        
-    } catch (error) {
-        console.error('Error:', error);
-        showNotification(error.message, 'error');
+        updateUI(data);
+    } catch (err) {
+        alert('Error: ' + err.message);
     } finally {
         hideLoading();
     }
@@ -113,119 +551,127 @@ async function uploadFile(file) {
 
 async function loadSample() {
     showLoading();
-    
     try {
-        const response = await fetch('/api/sample');
-        
-        if (!response.ok) {
-            throw new Error('Failed to load sample');
-        }
-        
-        const data = await response.json();
+        const res = await fetch('/api/sample');
+        const data = await res.json();
         graphData = data;
-        
-        updateDashboard(data);
-        renderGraph(data);
-        updateTables(data);
-        showDashboard();
-        showNotification('Sample data loaded!', 'success');
-        
-    } catch (error) {
-        console.error('Error:', error);
-        showNotification(error.message, 'error');
+        updateUI(data);
+    } catch (err) {
+        alert('Error: ' + err.message);
     } finally {
         hideLoading();
     }
 }
 
-function renderGraph(data) {
+function updateUI(data) {
+    document.getElementById('dashboard').style.display = 'block';
+    
+    // Stats
+    document.getElementById('totalAccounts').textContent = data.summary.total_accounts_analyzed;
+    document.getElementById('suspiciousAccounts').textContent = data.summary.suspicious_accounts_flagged;
+    document.getElementById('fraudRings').textContent = data.summary.fraud_rings_detected;
+    document.getElementById('processingTime').textContent = data.summary.processing_time_seconds + 's';
+    
+    // Tables
+    updateRingsTable(data.fraud_rings);
+    updateSuspiciousTable(data.suspicious_accounts);
+    
+    // Graph
+    drawGraph(data);
+}
+
+function updateRingsTable(rings) {
+    const tbody = document.getElementById('ringsTableBody');
+    tbody.innerHTML = '';
+    rings.forEach(ring => {
+        const row = tbody.insertRow();
+        row.insertCell().textContent = ring.ring_id;
+        row.insertCell().textContent = ring.pattern_type;
+        row.insertCell().textContent = ring.member_accounts.length;
+        row.insertCell().textContent = ring.risk_score;
+        row.insertCell().textContent = ring.member_accounts.slice(0, 3).join(', ');
+    });
+}
+
+function updateSuspiciousTable(accounts) {
+    const tbody = document.getElementById('suspiciousTableBody');
+    tbody.innerHTML = '';
+    accounts.slice(0, 15).forEach(acc => {
+        const row = tbody.insertRow();
+        row.insertCell().textContent = acc.account_id;
+        row.insertCell().textContent = acc.suspicion_score;
+        row.insertCell().textContent = acc.detected_patterns.join(', ');
+        row.insertCell().textContent = acc.ring_id;
+    });
+}
+
+function drawGraph(data) {
     const container = document.getElementById('graphContainer');
     const width = container.clientWidth;
     const height = 500;
     
-    // Clear previous graph
     d3.select(container).selectAll('*').remove();
     
-    const svg = d3.select(container)
+    svg = d3.select(container)
         .append('svg')
         .attr('width', width)
         .attr('height', height);
     
-    const g = svg.append('g');
+    g = svg.append('g');
     
-    // Add zoom
-    const zoom = d3.zoom()
+    zoom = d3.zoom()
         .scaleExtent([0.1, 4])
-        .on('zoom', (event) => {
-            g.attr('transform', event.transform);
-        });
+        .on('zoom', (event) => g.attr('transform', event.transform));
     
     svg.call(zoom);
     
-    // Create nodes and links
+    // Create nodes
     const nodes = new Map();
     const links = [];
     
-    // Add nodes from transactions
     if (data.transactions) {
         data.transactions.forEach(tx => {
             if (!nodes.has(tx.sender)) {
+                const sus = data.suspicious_accounts.find(a => a.account_id === tx.sender);
                 nodes.set(tx.sender, {
                     id: tx.sender,
-                    suspicious: data.suspicious_accounts.some(a => a.account_id === tx.sender),
-                    score: data.suspicious_accounts.find(a => a.account_id === tx.sender)?.suspicion_score || 0,
-                    patterns: data.suspicious_accounts.find(a => a.account_id === tx.sender)?.detected_patterns || []
+                    suspicious: !!sus,
+                    score: sus ? sus.suspicion_score : 0,
+                    patterns: sus ? sus.detected_patterns : []
                 });
             }
             if (!nodes.has(tx.receiver)) {
+                const sus = data.suspicious_accounts.find(a => a.account_id === tx.receiver);
                 nodes.set(tx.receiver, {
                     id: tx.receiver,
-                    suspicious: data.suspicious_accounts.some(a => a.account_id === tx.receiver),
-                    score: data.suspicious_accounts.find(a => a.account_id === tx.receiver)?.suspicion_score || 0,
-                    patterns: data.suspicious_accounts.find(a => a.account_id === tx.receiver)?.detected_patterns || []
+                    suspicious: !!sus,
+                    score: sus ? sus.suspicion_score : 0,
+                    patterns: sus ? sus.detected_patterns : []
                 });
             }
-            
             links.push({
                 source: tx.sender,
-                target: tx.receiver,
-                value: tx.amount
+                target: tx.receiver
             });
         });
     }
     
-    const graph = {
-        nodes: Array.from(nodes.values()),
-        links: links
-    };
-    
-    // Force simulation
-    const simulation = d3.forceSimulation(graph.nodes)
-        .force('link', d3.forceLink(graph.links).id(d => d.id).distance(120))
-        .force('charge', d3.forceManyBody().strength(-400))
-        .force('center', d3.forceCenter(width / 2, height / 2))
-        .force('collision', d3.forceCollide().radius(30));
-    
     // Draw links
-    const link = g.append('g')
+    g.append('g')
         .selectAll('line')
-        .data(graph.links)
+        .data(links)
         .enter()
         .append('line')
-        .attr('stroke', d => {
-            if (d.source.suspicious || d.target.suspicious) return '#ef4444';
-            return '#94a3b8';
-        })
-        .attr('stroke-opacity', d => (d.source.suspicious || d.target.suspicious) ? 0.8 : 0.3)
-        .attr('stroke-width', d => (d.source.suspicious || d.target.suspicious) ? 2 : 1);
+        .attr('stroke', '#94a3b8')
+        .attr('stroke-opacity', 0.3);
     
     // Draw nodes
-    const node = g.append('g')
+    g.append('g')
         .selectAll('circle')
-        .data(graph.nodes)
+        .data(Array.from(nodes.values()))
         .enter()
         .append('circle')
-        .attr('r', d => d.suspicious ? 12 + (d.score / 20) : 8)
+        .attr('r', d => d.suspicious ? 12 + (d.score/20) : 8)
         .attr('fill', d => {
             if (!d.suspicious) return '#94a3b8';
             if (d.patterns.includes('cycle')) return '#ef4444';
@@ -235,192 +681,49 @@ function renderGraph(data) {
         })
         .attr('stroke', '#fff')
         .attr('stroke-width', 2)
-        .attr('class', d => {
-            let classes = 'node';
-            if (d.suspicious) classes += ' suspicious';
-            if (d.patterns.includes('cycle')) classes += ' cycle';
-            if (d.patterns.includes('fan_pattern')) classes += ' fan';
-            if (d.patterns.includes('shell_chain')) classes += ' chain';
-            return classes;
-        })
-        .call(d3.drag()
-            .on('start', (event, d) => {
-                if (!event.active) simulation.alphaTarget(0.3).restart();
-                d.fx = d.x;
-                d.fy = d.y;
-            })
-            .on('drag', (event, d) => {
-                d.fx = event.x;
-                d.fy = event.y;
-            })
-            .on('end', (event, d) => {
-                if (!event.active) simulation.alphaTarget(0);
-                d.fx = null;
-                d.fy = null;
-            }))
-        .on('mouseover', (event, d) => {
+        .on('mouseover', function(event, d) {
             tooltip.transition().duration(200).style('opacity', 0.9);
-            tooltip.html(`
-                <strong>Account:</strong> ${d.id}<br>
-                <strong>Score:</strong> ${d.score.toFixed(2)}<br>
-                <strong>Patterns:</strong> ${d.patterns.join(', ') || 'none'}<br>
-                <strong>Suspicious:</strong> ${d.suspicious ? 'Yes' : 'No'}
-            `)
+            tooltip.html(`<strong>${d.id}</strong><br>Score: ${d.score}<br>${d.patterns.join(', ')}`)
                 .style('left', (event.pageX + 10) + 'px')
                 .style('top', (event.pageY - 28) + 'px');
         })
-        .on('mouseout', () => {
+        .on('mouseout', function() {
             tooltip.transition().duration(500).style('opacity', 0);
         });
     
-    // Add labels for suspicious nodes
-    const labels = g.append('g')
-        .selectAll('text')
-        .data(graph.nodes.filter(d => d.suspicious))
-        .enter()
-        .append('text')
-        .text(d => d.id.length > 8 ? d.id.substring(0, 6) + '..' : d.id)
-        .attr('font-size', '10px')
-        .attr('fill', '#fff')
-        .attr('text-anchor', 'middle')
-        .attr('dy', -15)
-        .attr('font-weight', 'bold');
+    // Simulation
+    const simulation = d3.forceSimulation(Array.from(nodes.values()))
+        .force('link', d3.forceLink(links).id(d => d.id).distance(120))
+        .force('charge', d3.forceManyBody().strength(-400))
+        .force('center', d3.forceCenter(width/2, height/2));
     
-    // Update positions
     simulation.on('tick', () => {
-        link
+        g.selectAll('line')
             .attr('x1', d => d.source.x)
             .attr('y1', d => d.source.y)
             .attr('x2', d => d.target.x)
             .attr('y2', d => d.target.y);
         
-        node
+        g.selectAll('circle')
             .attr('cx', d => d.x)
             .attr('cy', d => d.y);
-        
-        labels
-            .attr('x', d => d.x)
-            .attr('y', d => d.y);
     });
-    
-    currentGraph = { svg, zoom, simulation };
-}
-
-function highlightPattern(pattern) {
-    if (!currentGraph) return;
-    
-    d3.selectAll('.node')
-        .transition()
-        .duration(300)
-        .attr('r', d => {
-            if (d.patterns && d.patterns.includes(pattern)) return 18;
-            return d.suspicious ? 12 : 8;
-        })
-        .attr('stroke', d => {
-            if (d.patterns && d.patterns.includes(pattern)) return '#fbbf24';
-            return '#fff';
-        })
-        .attr('stroke-width', d => {
-            if (d.patterns && d.patterns.includes(pattern)) return 4;
-            return 2;
-        });
-}
-
-function resetGraphView() {
-    if (!currentGraph) return;
-    
-    d3.selectAll('.node')
-        .transition()
-        .duration(300)
-        .attr('r', d => d.suspicious ? 12 + (d.score / 20) : 8)
-        .attr('stroke', '#fff')
-        .attr('stroke-width', 2);
-}
-
-function resetZoom() {
-    if (!currentGraph) return;
-    
-    const svg = d3.select('#graphContainer svg');
-    svg.transition().duration(750).call(
-        currentGraph.zoom.transform,
-        d3.zoomIdentity
-    );
 }
 
 function exportGraph() {
-    const container = document.getElementById('graphContainer');
-    const svg = container.querySelector('svg');
-    
-    if (!svg) return;
+    const svgNode = document.querySelector('#graphContainer svg');
+    if (!svgNode) return;
     
     const serializer = new XMLSerializer();
-    const source = serializer.serializeToString(svg);
-    
-    const blob = new Blob([source], { type: 'image/svg+xml' });
+    const source = serializer.serializeToString(svgNode);
+    const blob = new Blob([source], {type: 'image/svg+xml'});
     const url = URL.createObjectURL(blob);
     
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'graph_export.svg';
-    link.click();
-    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'graph.svg';
+    a.click();
     URL.revokeObjectURL(url);
-}
-
-function updateDashboard(data) {
-    document.getElementById('totalAccounts').textContent = data.summary.total_accounts_analyzed;
-    document.getElementById('suspiciousAccounts').textContent = data.summary.suspicious_accounts_flagged;
-    document.getElementById('fraudRings').textContent = data.summary.fraud_rings_detected;
-    document.getElementById('processingTime').textContent = data.summary.processing_time_seconds + 's';
-}
-
-function updateTables(data) {
-    // Rings table
-    const ringsBody = document.getElementById('ringsTableBody');
-    ringsBody.innerHTML = '';
-    
-    data.fraud_rings.forEach(ring => {
-        const row = ringsBody.insertRow();
-        row.insertCell().textContent = ring.ring_id;
-        row.insertCell().textContent = ring.pattern_type;
-        row.insertCell().textContent = ring.member_accounts.length;
-        
-        const riskCell = row.insertCell();
-        riskCell.textContent = ring.risk_score;
-        if (ring.risk_score > 80) riskCell.style.color = '#ef4444';
-        else if (ring.risk_score > 60) riskCell.style.color = '#f59e0b';
-        else riskCell.style.color = '#10b981';
-        
-        row.insertCell().textContent = ring.member_accounts.slice(0, 3).join(', ') + 
-            (ring.member_accounts.length > 3 ? ` +${ring.member_accounts.length - 3}` : '');
-    });
-    
-    // Suspicious accounts table
-    const suspiciousBody = document.getElementById('suspiciousTableBody');
-    suspiciousBody.innerHTML = '';
-    
-    data.suspicious_accounts.slice(0, 15).forEach(acc => {
-        const row = suspiciousBody.insertRow();
-        row.insertCell().textContent = acc.account_id;
-        
-        const scoreCell = row.insertCell();
-        scoreCell.textContent = acc.suspicion_score;
-        if (acc.suspicion_score > 80) scoreCell.style.color = '#ef4444';
-        else if (acc.suspicion_score > 60) scoreCell.style.color = '#f59e0b';
-        else scoreCell.style.color = '#3b82f6';
-        
-        row.insertCell().textContent = acc.detected_patterns.join(', ');
-        row.insertCell().textContent = acc.ring_id;
-        
-        const riskCell = row.insertCell();
-        if (acc.suspicion_score > 80) riskCell.textContent = 'HIGH';
-        else if (acc.suspicion_score > 60) riskCell.textContent = 'MEDIUM';
-        else riskCell.textContent = 'LOW';
-    });
-}
-
-function showDashboard() {
-    document.getElementById('dashboard').style.display = 'block';
 }
 
 function showLoading() {
@@ -431,58 +734,28 @@ function hideLoading() {
     document.getElementById('loadingOverlay').style.display = 'none';
 }
 
-function showNotification(message, type) {
-    const notification = document.createElement('div');
-    notification.className = `notification notification-${type}`;
-    notification.textContent = message;
-    notification.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        padding: 12px 20px;
-        background: ${type === 'success' ? '#10b981' : '#ef4444'};
-        color: white;
-        border-radius: 6px;
-        z-index: 1001;
-        animation: slideIn 0.3s;
-    `;
-    
-    document.body.appendChild(notification);
-    
-    setTimeout(() => {
-        notification.style.animation = 'slideOut 0.3s';
-        setTimeout(() => notification.remove(), 300);
-    }, 3000);
-}
-
 async function downloadJson() {
     if (!graphData) {
-        showNotification('No data to download', 'error');
+        alert('No data');
         return;
     }
-    
-    try {
-        const response = await fetch('/api/download/json');
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'fraud_detection_results.json';
-        a.click();
-        window.URL.revokeObjectURL(url);
-        showNotification('JSON downloaded!', 'success');
-    } catch (error) {
-        showNotification('Download failed', 'error');
-    }
+    const res = await fetch('/api/download/json');
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'results.json';
+    a.click();
+    URL.revokeObjectURL(url);
 }
 
 function downloadTemplate() {
-    const csv = 'transaction_id,sender_id,receiver_id,amount,timestamp\nTXN001,ACC_A,ACC_B,5237,2026-02-18 10:00:00\nTXN002,ACC_B,ACC_C,4812,2026-02-18 11:00:00\nTXN003,ACC_C,ACC_A,4756,2026-02-18 12:00:00';
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
+    const csv = 'transaction_id,sender_id,receiver_id,amount,timestamp\nTXN001,ACC_A,ACC_B,5237,2026-02-18 10:00:00';
+    const blob = new Blob([csv], {type: 'text/csv'});
+    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = 'template.csv';
     a.click();
-    window.URL.revokeObjectURL(url);
+    URL.revokeObjectURL(url);
 }

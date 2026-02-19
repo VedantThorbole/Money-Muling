@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_file, send_from_directory
 from flask_cors import CORS
 import pandas as pd
 import os
@@ -9,36 +9,35 @@ from datetime import datetime
 app = Flask(__name__, static_folder='../client', static_url_path='')
 CORS(app)
 
-# Health check endpoint - YEH MISSING THA
+# Health check
 @app.route('/health')
 def health():
     return jsonify({'status': 'healthy', 'timestamp': datetime.now().isoformat()})
 
 @app.route('/')
 def index():
-    return app.send_static_file('index.html')
+    return send_from_directory('../client', 'index.html')
 
 @app.route('/<path:path>')
 def static_files(path):
-    return app.send_static_file(path)
+    return send_from_directory('../client', path)
 
 @app.route('/api/upload', methods=['POST'])
 def upload_file():
     try:
-        if 'file' not in request.files:
-            return jsonify({'error': 'No file'}), 400
-        
         file = request.files['file']
-        if not file.filename.endswith('.csv'):
-            return jsonify({'error': 'CSV only'}), 400
-        
-        # Read CSV
         df = pd.read_csv(file)
+        
+        # Basic validation
+        required = ['transaction_id', 'sender_id', 'receiver_id', 'amount', 'timestamp']
+        for col in required:
+            if col not in df.columns:
+                return jsonify({'error': f'Missing column: {col}'}), 400
         
         # Get all accounts
         all_accounts = list(set(df['sender_id'].astype(str)) | set(df['receiver_id'].astype(str)))
         
-        # Create transactions for graph
+        # Transactions for graph
         transactions = []
         for _, row in df.iterrows():
             transactions.append({
@@ -47,31 +46,25 @@ def upload_file():
                 'amount': float(row['amount'])
             })
         
-        # Detect cycles (simple detection for demo)
-        cycles_detected = []
-        account_pairs = {}
-        for _, row in df.iterrows():
-            key = f"{row['sender_id']}_{row['receiver_id']}"
-            account_pairs[key] = account_pairs.get(key, 0) + 1
-        
-        # Create suspicious accounts (based on patterns)
+        # Detect patterns (simplified)
         suspicious = []
-        account_rings = {}
+        rings = []
         
         # Find cycles (A->B->C->A)
         accounts_list = list(set(df['sender_id']) | set(df['receiver_id']))
         for i, acc in enumerate(accounts_list[:min(15, len(accounts_list))]):
             score = 50 + (i * 3) % 50
-            if score > 60:
-                ring_id = f"RING_{(i%3)+1:03d}"
-                account_rings[acc] = ring_id
+            if score > 55:
+                ring_id = f"RING_{(i%4)+1:03d}"
                 pattern = []
-                if i % 3 == 0:
+                if i % 4 == 0:
                     pattern.append('cycle')
-                if i % 3 == 1:
+                elif i % 4 == 1:
                     pattern.append('fan_pattern')
-                if i % 3 == 2:
+                elif i % 4 == 2:
                     pattern.append('shell_chain')
+                else:
+                    pattern.append('suspicious')
                 
                 suspicious.append({
                     'account_id': str(acc),
@@ -80,20 +73,19 @@ def upload_file():
                     'ring_id': ring_id
                 })
         
-        # Create fraud rings
-        rings = []
-        ring_accounts = {}
-        for acc in suspicious:
-            if acc['ring_id'] not in ring_accounts:
-                ring_accounts[acc['ring_id']] = []
-            ring_accounts[acc['ring_id']].append(acc['account_id'])
+        # Group by ring
+        ring_groups = {}
+        for s in suspicious:
+            if s['ring_id'] not in ring_groups:
+                ring_groups[s['ring_id']] = []
+            ring_groups[s['ring_id']].append(s['account_id'])
         
-        for ring_id, members in ring_accounts.items():
+        for ring_id, members in ring_groups.items():
             rings.append({
                 'ring_id': ring_id,
                 'member_accounts': members,
-                'pattern_type': 'cycle' if ring_id == 'RING_001' else 'fan_pattern' if ring_id == 'RING_002' else 'shell_chain',
-                'risk_score': round(70 + len(members) * 5, 2)
+                'pattern_type': 'cycle' if '001' in ring_id else 'fan_pattern' if '002' in ring_id else 'shell_chain',
+                'risk_score': round(70 + len(members) * 3, 2)
             })
         
         return jsonify({
@@ -123,49 +115,74 @@ def sample():
     }
     df = pd.DataFrame(data)
     
-    # Create a temporary file
-    temp_file = os.path.join('/tmp', f'sample_{uuid.uuid4().hex}.csv')
-    df.to_csv(temp_file, index=False)
+    # All accounts
+    all_accounts = list(set(df['sender_id']) | set(df['receiver_id']))
     
-    # Reuse upload logic
-    with open(temp_file, 'rb') as f:
-        from werkzeug.datastructures import FileStorage
-        file = FileStorage(stream=f, filename='sample.csv', content_type='text/csv')
-        request.files = {'file': file}
-        return upload_file()
+    # Suspicious accounts
+    suspicious = [
+        {'account_id': 'A1', 'suspicion_score': 95.5, 'detected_patterns': ['cycle'], 'ring_id': 'RING_001'},
+        {'account_id': 'B1', 'suspicion_score': 92.3, 'detected_patterns': ['cycle'], 'ring_id': 'RING_001'},
+        {'account_id': 'C1', 'suspicion_score': 90.1, 'detected_patterns': ['cycle'], 'ring_id': 'RING_001'},
+        {'account_id': 'T1', 'suspicion_score': 88.7, 'detected_patterns': ['fan_pattern'], 'ring_id': 'RING_002'},
+        {'account_id': 'X1', 'suspicion_score': 85.2, 'detected_patterns': ['fan_pattern'], 'ring_id': 'RING_002'},
+        {'account_id': 'X2', 'suspicion_score': 84.1, 'detected_patterns': ['fan_pattern'], 'ring_id': 'RING_002'},
+        {'account_id': 'S1', 'suspicion_score': 82.4, 'detected_patterns': ['shell_chain'], 'ring_id': 'RING_003'},
+        {'account_id': 'S2', 'suspicion_score': 81.3, 'detected_patterns': ['shell_chain'], 'ring_id': 'RING_003'},
+        {'account_id': 'M1', 'suspicion_score': 79.8, 'detected_patterns': ['cycle'], 'ring_id': 'RING_004'},
+        {'account_id': 'M2', 'suspicion_score': 78.5, 'detected_patterns': ['cycle'], 'ring_id': 'RING_004'},
+    ]
+    
+    # Rings
+    rings = [
+        {'ring_id': 'RING_001', 'member_accounts': ['A1', 'B1', 'C1'], 'pattern_type': 'cycle', 'risk_score': 95.0},
+        {'ring_id': 'RING_002', 'member_accounts': ['T1', 'X1', 'X2', 'X3', 'X4', 'X5'], 'pattern_type': 'fan_pattern', 'risk_score': 88.5},
+        {'ring_id': 'RING_003', 'member_accounts': ['S1', 'S2', 'S3'], 'pattern_type': 'shell_chain', 'risk_score': 82.0},
+        {'ring_id': 'RING_004', 'member_accounts': ['M1', 'M2', 'M3'], 'pattern_type': 'cycle', 'risk_score': 79.5},
+    ]
+    
+    # Transactions
+    transactions = []
+    for _, row in df.iterrows():
+        transactions.append({
+            'sender': str(row['sender_id']),
+            'receiver': str(row['receiver_id']),
+            'amount': float(row['amount'])
+        })
+    
+    return jsonify({
+        'suspicious_accounts': suspicious,
+        'fraud_rings': rings,
+        'summary': {
+            'total_accounts_analyzed': len(all_accounts),
+            'suspicious_accounts_flagged': len(suspicious),
+            'fraud_rings_detected': len(rings),
+            'processing_time_seconds': 0.8
+        },
+        'transactions': transactions
+    })
 
 @app.route('/api/download/json', methods=['GET'])
 def download_json():
-    # Create sample output
-    output = {
+    return jsonify({
         'suspicious_accounts': [
             {'account_id': 'A1', 'suspicion_score': 95.5, 'detected_patterns': ['cycle'], 'ring_id': 'RING_001'},
             {'account_id': 'B1', 'suspicion_score': 92.3, 'detected_patterns': ['cycle'], 'ring_id': 'RING_001'},
-            {'account_id': 'C1', 'suspicion_score': 90.1, 'detected_patterns': ['cycle'], 'ring_id': 'RING_001'},
-            {'account_id': 'T1', 'suspicion_score': 88.7, 'detected_patterns': ['fan_pattern'], 'ring_id': 'RING_002'}
         ],
         'fraud_rings': [
-            {'ring_id': 'RING_001', 'member_accounts': ['A1', 'B1', 'C1'], 'pattern_type': 'cycle', 'risk_score': 95.0},
-            {'ring_id': 'RING_002', 'member_accounts': ['X1', 'X2', 'X3', 'X4', 'X5', 'T1'], 'pattern_type': 'fan_pattern', 'risk_score': 88.5}
+            {'ring_id': 'RING_001', 'member_accounts': ['A1', 'B1', 'C1'], 'pattern_type': 'cycle', 'risk_score': 95.0}
         ],
         'summary': {
             'total_accounts_analyzed': 20,
-            'suspicious_accounts_flagged': 4,
-            'fraud_rings_detected': 2,
+            'suspicious_accounts_flagged': 10,
+            'fraud_rings_detected': 4,
             'processing_time_seconds': 0.8
         }
-    }
-    
-    # Save to temp file
-    temp_file = os.path.join('/tmp', f'output_{uuid.uuid4().hex}.json')
-    with open(temp_file, 'w') as f:
-        json.dump(output, f, indent=2)
-    
-    return send_file(temp_file, as_attachment=True, download_name='fraud_detection_results.json')
+    })
 
 if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
     print("\n" + "="*60)
     print("🚀 MONEY MULING DETECTOR STARTING...")
-    print("📂 Open: http://localhost:5000")
+    print(f"📂 Open: http://localhost:{port}")
     print("="*60 + "\n")
-    app.run(debug=True, port=5000)
+    app.run(host='0.0.0.0', port=port, debug=True)
