@@ -1,18 +1,35 @@
-// Global state
+// Global variables
 let graphData = null;
-let svg = null;
-let simulation = null;
-let tooltip = null;
-let width, height;
+let currentGraph = null;
+let tooltip;
 
-// Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
-    initializeEventListeners();
     initializeTooltip();
-    window.addEventListener('resize', debounce(handleResize, 250));
+    checkAPI();
+    setupEventListeners();
 });
 
-function initializeEventListeners() {
+function initializeTooltip() {
+    tooltip = d3.select('body')
+        .append('div')
+        .attr('class', 'tooltip')
+        .style('opacity', 0);
+}
+
+function checkAPI() {
+    fetch('/health')
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('apiStatus').innerHTML = '✅ API Connected';
+            document.getElementById('apiStatus').style.color = '#10b981';
+        })
+        .catch(error => {
+            document.getElementById('apiStatus').innerHTML = '⚠️ API Error (Using Fallback)';
+            document.getElementById('apiStatus').style.color = '#f59e0b';
+        });
+}
+
+function setupEventListeners() {
     // Upload area
     const uploadArea = document.getElementById('uploadArea');
     const fileInput = document.getElementById('fileInput');
@@ -33,42 +50,34 @@ function initializeEventListeners() {
         uploadArea.classList.remove('dragover');
         const file = e.dataTransfer.files[0];
         if (file && file.name.endsWith('.csv')) {
-            handleFileUpload(file);
+            uploadFile(file);
         } else {
-            showNotification('Please upload a CSV file', 'error');
+            alert('Please upload a CSV file');
         }
     });
     
     fileInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (file) handleFileUpload(file);
+        if (e.target.files[0]) uploadFile(e.target.files[0]);
     });
     
     // Buttons
-    document.getElementById('loadSampleBtn').addEventListener('click', loadSampleData);
+    document.getElementById('loadSampleBtn').addEventListener('click', loadSample);
     document.getElementById('downloadJsonBtn').addEventListener('click', downloadJson);
     document.getElementById('downloadTemplate').addEventListener('click', (e) => {
         e.preventDefault();
         downloadTemplate();
     });
     
-    // Graph controls
+    // Graph control buttons - FIXED
     document.getElementById('highlightCycles').addEventListener('click', () => highlightPattern('cycle'));
-    document.getElementById('highlightFan').addEventListener('click', () => highlightPattern('fan'));
-    document.getElementById('highlightChains').addEventListener('click', () => highlightPattern('chain'));
-    document.getElementById('resetView').addEventListener('click', resetGraphView);
+    document.getElementById('highlightFan').addEventListener('click', () => highlightPattern('fan_pattern'));
+    document.getElementById('highlightChains').addEventListener('click', () => highlightPattern('shell_chain'));
+    document.getElementById('showAll').addEventListener('click', resetGraphView);
+    document.getElementById('resetView').addEventListener('click', resetZoom);
+    document.getElementById('exportGraph').addEventListener('click', exportGraph);
 }
 
-function initializeTooltip() {
-    tooltip = d3.select('body')
-        .append('div')
-        .attr('class', 'tooltip')
-        .style('opacity', 0)
-        .style('position', 'absolute')
-        .style('pointer-events', 'none');
-}
-
-async function handleFileUpload(file) {
+async function uploadFile(file) {
     showLoading();
     
     const formData = new FormData();
@@ -102,15 +111,14 @@ async function handleFileUpload(file) {
     }
 }
 
-async function loadSampleData() {
+async function loadSample() {
     showLoading();
     
     try {
         const response = await fetch('/api/sample');
         
         if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || 'Failed to load sample');
+            throw new Error('Failed to load sample');
         }
         
         const data = await response.json();
@@ -132,84 +140,153 @@ async function loadSampleData() {
 
 function renderGraph(data) {
     const container = document.getElementById('graphContainer');
-    width = container.clientWidth;
-    height = 500;
+    const width = container.clientWidth;
+    const height = 500;
     
     // Clear previous graph
-    d3.select('#graphContainer').selectAll('*').remove();
+    d3.select(container).selectAll('*').remove();
     
-    // Create SVG
-    svg = d3.select('#graphContainer')
+    const svg = d3.select(container)
         .append('svg')
         .attr('width', width)
-        .attr('height', height)
-        .append('g');
+        .attr('height', height);
     
-    // Add zoom behavior
+    const g = svg.append('g');
+    
+    // Add zoom
     const zoom = d3.zoom()
         .scaleExtent([0.1, 4])
         .on('zoom', (event) => {
-            svg.attr('transform', event.transform);
+            g.attr('transform', event.transform);
         });
     
-    d3.select('#graphContainer svg').call(zoom);
+    svg.call(zoom);
     
-    // Build graph data
-    const graph = buildGraphFromData(data);
+    // Create nodes and links
+    const nodes = new Map();
+    const links = [];
     
-    // Create force simulation
-    simulation = d3.forceSimulation(graph.nodes)
-        .force('link', d3.forceLink(graph.links).id(d => d.id).distance(150))
-        .force('charge', d3.forceManyBody().strength(-500))
+    // Add nodes from transactions
+    if (data.transactions) {
+        data.transactions.forEach(tx => {
+            if (!nodes.has(tx.sender)) {
+                nodes.set(tx.sender, {
+                    id: tx.sender,
+                    suspicious: data.suspicious_accounts.some(a => a.account_id === tx.sender),
+                    score: data.suspicious_accounts.find(a => a.account_id === tx.sender)?.suspicion_score || 0,
+                    patterns: data.suspicious_accounts.find(a => a.account_id === tx.sender)?.detected_patterns || []
+                });
+            }
+            if (!nodes.has(tx.receiver)) {
+                nodes.set(tx.receiver, {
+                    id: tx.receiver,
+                    suspicious: data.suspicious_accounts.some(a => a.account_id === tx.receiver),
+                    score: data.suspicious_accounts.find(a => a.account_id === tx.receiver)?.suspicion_score || 0,
+                    patterns: data.suspicious_accounts.find(a => a.account_id === tx.receiver)?.detected_patterns || []
+                });
+            }
+            
+            links.push({
+                source: tx.sender,
+                target: tx.receiver,
+                value: tx.amount
+            });
+        });
+    }
+    
+    const graph = {
+        nodes: Array.from(nodes.values()),
+        links: links
+    };
+    
+    // Force simulation
+    const simulation = d3.forceSimulation(graph.nodes)
+        .force('link', d3.forceLink(graph.links).id(d => d.id).distance(120))
+        .force('charge', d3.forceManyBody().strength(-400))
         .force('center', d3.forceCenter(width / 2, height / 2))
         .force('collision', d3.forceCollide().radius(30));
     
     // Draw links
-    const link = svg.append('g')
+    const link = g.append('g')
         .selectAll('line')
         .data(graph.links)
         .enter()
         .append('line')
-        .attr('class', d => `link ${d.suspicious ? 'suspicious' : ''}`)
-        .attr('stroke-width', d => Math.sqrt(d.value) || 1);
+        .attr('stroke', d => {
+            if (d.source.suspicious || d.target.suspicious) return '#ef4444';
+            return '#94a3b8';
+        })
+        .attr('stroke-opacity', d => (d.source.suspicious || d.target.suspicious) ? 0.8 : 0.3)
+        .attr('stroke-width', d => (d.source.suspicious || d.target.suspicious) ? 2 : 1);
     
     // Draw nodes
-    const node = svg.append('g')
+    const node = g.append('g')
         .selectAll('circle')
         .data(graph.nodes)
         .enter()
         .append('circle')
+        .attr('r', d => d.suspicious ? 12 + (d.score / 20) : 8)
+        .attr('fill', d => {
+            if (!d.suspicious) return '#94a3b8';
+            if (d.patterns.includes('cycle')) return '#ef4444';
+            if (d.patterns.includes('fan_pattern')) return '#f59e0b';
+            if (d.patterns.includes('shell_chain')) return '#10b981';
+            return '#3b82f6';
+        })
+        .attr('stroke', '#fff')
+        .attr('stroke-width', 2)
         .attr('class', d => {
             let classes = 'node';
             if (d.suspicious) classes += ' suspicious';
-            if (d.pattern) classes += ` ${d.pattern}`;
+            if (d.patterns.includes('cycle')) classes += ' cycle';
+            if (d.patterns.includes('fan_pattern')) classes += ' fan';
+            if (d.patterns.includes('shell_chain')) classes += ' chain';
             return classes;
         })
-        .attr('r', d => 8 + (d.score / 10))
-        .attr('fill', d => getNodeColor(d))
-        .attr('stroke', '#fff')
-        .attr('stroke-width', 1.5)
         .call(d3.drag()
-            .on('start', dragStarted)
-            .on('drag', dragged)
-            .on('end', dragEnded))
-        .on('mouseover', (event, d) => showTooltip(event, d))
-        .on('mouseout', hideTooltip)
-        .on('click', (event, d) => handleNodeClick(d));
+            .on('start', (event, d) => {
+                if (!event.active) simulation.alphaTarget(0.3).restart();
+                d.fx = d.x;
+                d.fy = d.y;
+            })
+            .on('drag', (event, d) => {
+                d.fx = event.x;
+                d.fy = event.y;
+            })
+            .on('end', (event, d) => {
+                if (!event.active) simulation.alphaTarget(0);
+                d.fx = null;
+                d.fy = null;
+            }))
+        .on('mouseover', (event, d) => {
+            tooltip.transition().duration(200).style('opacity', 0.9);
+            tooltip.html(`
+                <strong>Account:</strong> ${d.id}<br>
+                <strong>Score:</strong> ${d.score.toFixed(2)}<br>
+                <strong>Patterns:</strong> ${d.patterns.join(', ') || 'none'}<br>
+                <strong>Suspicious:</strong> ${d.suspicious ? 'Yes' : 'No'}
+            `)
+                .style('left', (event.pageX + 10) + 'px')
+                .style('top', (event.pageY - 28) + 'px');
+        })
+        .on('mouseout', () => {
+            tooltip.transition().duration(500).style('opacity', 0);
+        });
     
     // Add labels for suspicious nodes
-    const labels = svg.append('g')
+    const labels = g.append('g')
         .selectAll('text')
         .data(graph.nodes.filter(d => d.suspicious))
         .enter()
         .append('text')
-        .text(d => d.id.substring(0, 8) + '...')
+        .text(d => d.id.length > 8 ? d.id.substring(0, 6) + '..' : d.id)
         .attr('font-size', '10px')
         .attr('fill', '#fff')
         .attr('text-anchor', 'middle')
-        .attr('dy', -15);
+        .attr('dy', -15)
+        .attr('font-weight', 'bold');
     
-    // Update positions on tick
+    // Update positions
     simulation.on('tick', () => {
         link
             .attr('x1', d => d.source.x)
@@ -225,125 +302,69 @@ function renderGraph(data) {
             .attr('x', d => d.x)
             .attr('y', d => d.y);
     });
+    
+    currentGraph = { svg, zoom, simulation };
 }
 
-function buildGraphFromData(data) {
-    const nodes = new Map();
-    const links = [];
+function highlightPattern(pattern) {
+    if (!currentGraph) return;
     
-    // Add suspicious accounts as nodes
-    if (data.suspicious_accounts) {
-        data.suspicious_accounts.forEach(acc => {
-            nodes.set(acc.account_id, {
-                id: acc.account_id,
-                score: acc.suspicion_score,
-                suspicious: true,
-                pattern: acc.detected_patterns[0]?.split('_')[0] || 'unknown',
-                ring_id: acc.ring_id
-            });
+    d3.selectAll('.node')
+        .transition()
+        .duration(300)
+        .attr('r', d => {
+            if (d.patterns && d.patterns.includes(pattern)) return 18;
+            return d.suspicious ? 12 : 8;
+        })
+        .attr('stroke', d => {
+            if (d.patterns && d.patterns.includes(pattern)) return '#fbbf24';
+            return '#fff';
+        })
+        .attr('stroke-width', d => {
+            if (d.patterns && d.patterns.includes(pattern)) return 4;
+            return 2;
         });
-    }
+}
+
+function resetGraphView() {
+    if (!currentGraph) return;
     
-    // Add ring members that might not be in suspicious_accounts
-    if (data.fraud_rings) {
-        data.fraud_rings.forEach(ring => {
-            ring.member_accounts.forEach(accId => {
-                if (!nodes.has(accId)) {
-                    nodes.set(accId, {
-                        id: accId,
-                        score: 0,
-                        suspicious: false,
-                        pattern: 'normal',
-                        ring_id: ring.ring_id
-                    });
-                }
-            });
-        });
-    }
+    d3.selectAll('.node')
+        .transition()
+        .duration(300)
+        .attr('r', d => d.suspicious ? 12 + (d.score / 20) : 8)
+        .attr('stroke', '#fff')
+        .attr('stroke-width', 2);
+}
+
+function resetZoom() {
+    if (!currentGraph) return;
     
-    // Create some sample links for visualization
-    // In production, this would come from actual transaction data
-    if (data.fraud_rings) {
-        data.fraud_rings.forEach(ring => {
-            const members = ring.member_accounts;
-            for (let i = 0; i < members.length - 1; i++) {
-                links.push({
-                    source: members[i],
-                    target: members[i + 1],
-                    value: 1,
-                    suspicious: true
-                });
-            }
-        });
-    }
+    const svg = d3.select('#graphContainer svg');
+    svg.transition().duration(750).call(
+        currentGraph.zoom.transform,
+        d3.zoomIdentity
+    );
+}
+
+function exportGraph() {
+    const container = document.getElementById('graphContainer');
+    const svg = container.querySelector('svg');
     
-    return {
-        nodes: Array.from(nodes.values()),
-        links: links
-    };
-}
-
-function getNodeColor(d) {
-    if (!d.suspicious) return '#4b5563'; // gray
+    if (!svg) return;
     
-    switch(d.pattern) {
-        case 'cycle':
-            return '#ef4444'; // red
-        case 'fan':
-            return '#f59e0b'; // orange
-        case 'shell':
-            return '#10b981'; // green
-        default:
-            return '#8b5cf6'; // purple
-    }
-}
-
-function showTooltip(event, d) {
-    tooltip.transition()
-        .duration(200)
-        .style('opacity', 0.9);
+    const serializer = new XMLSerializer();
+    const source = serializer.serializeToString(svg);
     
-    let patterns = '';
-    if (d.pattern && d.pattern !== 'normal') {
-        patterns = `<p><strong>Pattern:</strong> ${d.pattern}</p>`;
-    }
+    const blob = new Blob([source], { type: 'image/svg+xml' });
+    const url = URL.createObjectURL(blob);
     
-    tooltip.html(`
-        <h4>Account: ${d.id}</h4>
-        <p><strong>Suspicion Score:</strong> ${d.score.toFixed(2)}</p>
-        ${patterns}
-        <p><strong>Ring ID:</strong> ${d.ring_id || 'None'}</p>
-    `)
-        .style('left', (event.pageX + 10) + 'px')
-        .style('top', (event.pageY - 28) + 'px');
-}
-
-function hideTooltip() {
-    tooltip.transition()
-        .duration(500)
-        .style('opacity', 0);
-}
-
-function handleNodeClick(d) {
-    console.log('Node clicked:', d);
-    // Could expand to show more details
-}
-
-function dragStarted(event, d) {
-    if (!event.active) simulation.alphaTarget(0.3).restart();
-    d.fx = d.x;
-    d.fy = d.y;
-}
-
-function dragged(event, d) {
-    d.fx = event.x;
-    d.fy = event.y;
-}
-
-function dragEnded(event, d) {
-    if (!event.active) simulation.alphaTarget(0);
-    d.fx = null;
-    d.fy = null;
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'graph_export.svg';
+    link.click();
+    
+    URL.revokeObjectURL(url);
 }
 
 function updateDashboard(data) {
@@ -354,147 +375,48 @@ function updateDashboard(data) {
 }
 
 function updateTables(data) {
-    // Update fraud rings table
+    // Rings table
     const ringsBody = document.getElementById('ringsTableBody');
     ringsBody.innerHTML = '';
     
     data.fraud_rings.forEach(ring => {
         const row = ringsBody.insertRow();
-        
-        // Ring ID
         row.insertCell().textContent = ring.ring_id;
-        
-        // Pattern Type
         row.insertCell().textContent = ring.pattern_type;
-        
-        // Member Count
         row.insertCell().textContent = ring.member_accounts.length;
         
-        // Risk Score
-        const scoreCell = row.insertCell();
-        const score = ring.risk_score;
-        scoreCell.textContent = score.toFixed(2);
+        const riskCell = row.insertCell();
+        riskCell.textContent = ring.risk_score;
+        if (ring.risk_score > 80) riskCell.style.color = '#ef4444';
+        else if (ring.risk_score > 60) riskCell.style.color = '#f59e0b';
+        else riskCell.style.color = '#10b981';
         
-        // Add risk class
-        if (score >= 80) scoreCell.className = 'risk-high';
-        else if (score >= 50) scoreCell.className = 'risk-medium';
-        else scoreCell.className = 'risk-low';
-        
-        // Member Accounts (first 3)
-        const members = ring.member_accounts.slice(0, 3).join(', ');
-        const remaining = ring.member_accounts.length - 3;
-        row.insertCell().textContent = members + (remaining > 0 ? ` +${remaining} more` : '');
+        row.insertCell().textContent = ring.member_accounts.slice(0, 3).join(', ') + 
+            (ring.member_accounts.length > 3 ? ` +${ring.member_accounts.length - 3}` : '');
     });
     
-    // Update suspicious accounts table
+    // Suspicious accounts table
     const suspiciousBody = document.getElementById('suspiciousTableBody');
     suspiciousBody.innerHTML = '';
     
-    data.suspicious_accounts.slice(0, 20).forEach(acc => { // Show top 20
+    data.suspicious_accounts.slice(0, 15).forEach(acc => {
         const row = suspiciousBody.insertRow();
-        
         row.insertCell().textContent = acc.account_id;
         
-        // Suspicion Score
         const scoreCell = row.insertCell();
-        scoreCell.textContent = acc.suspicion_score.toFixed(2);
-        
-        // Add risk class
-        if (acc.suspicion_score >= 80) scoreCell.className = 'risk-high';
-        else if (acc.suspicion_score >= 50) scoreCell.className = 'risk-medium';
-        else scoreCell.className = 'risk-low';
+        scoreCell.textContent = acc.suspicion_score;
+        if (acc.suspicion_score > 80) scoreCell.style.color = '#ef4444';
+        else if (acc.suspicion_score > 60) scoreCell.style.color = '#f59e0b';
+        else scoreCell.style.color = '#3b82f6';
         
         row.insertCell().textContent = acc.detected_patterns.join(', ');
         row.insertCell().textContent = acc.ring_id;
+        
+        const riskCell = row.insertCell();
+        if (acc.suspicion_score > 80) riskCell.textContent = 'HIGH';
+        else if (acc.suspicion_score > 60) riskCell.textContent = 'MEDIUM';
+        else riskCell.textContent = 'LOW';
     });
-}
-
-function highlightPattern(pattern) {
-    if (!graphData) return;
-    
-    // Reset all nodes
-    d3.selectAll('.node')
-        .attr('r', d => 8 + (d.score / 10))
-        .attr('stroke', '#fff')
-        .attr('stroke-width', 1.5);
-    
-    // Highlight pattern
-    d3.selectAll('.node')
-        .filter(d => d.pattern === pattern)
-        .attr('r', d => 15 + (d.score / 10))
-        .attr('stroke', '#fbbf24')
-        .attr('stroke-width', 3);
-}
-
-function resetGraphView() {
-    if (!simulation) return;
-    
-    // Reset zoom
-    d3.select('#graphContainer svg')
-        .transition()
-        .duration(750)
-        .call(d3.zoom().transform, d3.zoomIdentity);
-    
-    // Reset node sizes
-    d3.selectAll('.node')
-        .attr('r', d => 8 + (d.score / 10))
-        .attr('stroke', '#fff')
-        .attr('stroke-width', 1.5);
-}
-
-function handleResize() {
-    if (!graphData) return;
-    
-    const container = document.getElementById('graphContainer');
-    width = container.clientWidth;
-    
-    d3.select('#graphContainer svg')
-        .attr('width', width);
-    
-    simulation.force('center', d3.forceCenter(width / 2, height / 2));
-    simulation.alpha(0.3).restart();
-}
-
-async function downloadJson() {
-    if (!graphData) {
-        showNotification('No data to download', 'warning');
-        return;
-    }
-    
-    try {
-        const response = await fetch('/api/download/json');
-        const blob = await response.blob();
-        
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `fraud_detection_${new Date().toISOString().slice(0,10)}.json`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
-        
-        showNotification('JSON downloaded!', 'success');
-        
-    } catch (error) {
-        console.error('Download error:', error);
-        showNotification('Failed to download JSON', 'error');
-    }
-}
-
-function downloadTemplate() {
-    fetch('/api/download/template')
-        .then(response => response.blob())
-        .then(blob => {
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'transaction_template.csv';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            window.URL.revokeObjectURL(url);
-        });
 }
 
 function showDashboard() {
@@ -509,8 +431,7 @@ function hideLoading() {
     document.getElementById('loadingOverlay').style.display = 'none';
 }
 
-function showNotification(message, type = 'info') {
-    // Create notification element
+function showNotification(message, type) {
     const notification = document.createElement('div');
     notification.className = `notification notification-${type}`;
     notification.textContent = message;
@@ -518,31 +439,50 @@ function showNotification(message, type = 'info') {
         position: fixed;
         top: 20px;
         right: 20px;
-        padding: 1rem 1.5rem;
-        border-radius: 0.5rem;
-        background: ${type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#3b82f6'};
+        padding: 12px 20px;
+        background: ${type === 'success' ? '#10b981' : '#ef4444'};
         color: white;
+        border-radius: 6px;
         z-index: 1001;
-        animation: slideIn 0.3s ease;
+        animation: slideIn 0.3s;
     `;
     
     document.body.appendChild(notification);
     
-    // Remove after 3 seconds
     setTimeout(() => {
-        notification.style.animation = 'slideOut 0.3s ease';
+        notification.style.animation = 'slideOut 0.3s';
         setTimeout(() => notification.remove(), 300);
     }, 3000);
 }
 
-function debounce(func, wait) {
-    let timeout;
-    return function executedFunction(...args) {
-        const later = () => {
-            clearTimeout(timeout);
-            func(...args);
-        };
-        clearTimeout(timeout);
-        timeout = setTimeout(later, wait);
-    };
+async function downloadJson() {
+    if (!graphData) {
+        showNotification('No data to download', 'error');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/download/json');
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'fraud_detection_results.json';
+        a.click();
+        window.URL.revokeObjectURL(url);
+        showNotification('JSON downloaded!', 'success');
+    } catch (error) {
+        showNotification('Download failed', 'error');
+    }
+}
+
+function downloadTemplate() {
+    const csv = 'transaction_id,sender_id,receiver_id,amount,timestamp\nTXN001,ACC_A,ACC_B,5237,2026-02-18 10:00:00\nTXN002,ACC_B,ACC_C,4812,2026-02-18 11:00:00\nTXN003,ACC_C,ACC_A,4756,2026-02-18 12:00:00';
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'template.csv';
+    a.click();
+    window.URL.revokeObjectURL(url);
 }
