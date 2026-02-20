@@ -174,10 +174,10 @@ Expected: Chain detected as suspicious
 
 ## 👥 Team Members
 
-- [Your Name] - Graph Algorithms
-- [Team Member 2] - Backend Development
-- [Team Member 3] - Frontend & Visualization
-- [Team Member 4] - Testing & Deployment
+- Vedant Thorbole - Graph Algorithms
+- Om Shinde - Backend Development
+- Harshal Sonar - Frontend & Visualization
+- Kruturaj Shinde - Testing & Deployment
 
 ## 📝 Submission Checklist
 
@@ -194,8 +194,8 @@ Expected: Chain detected as suspicious
 ## 📬 Contact
 
 For questions or feedback:
-- GitHub Issues: [link]
-- Email: your-team @example.com
+- GitHub Issues: https://github.com/VedantThorbole
+- Email: - vedantthorbole9@gmail.com
 
 ## 📄 License
 
